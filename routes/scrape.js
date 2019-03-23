@@ -1,58 +1,64 @@
 //Dependencies
-const express = require('express'),
-      cheerio = require('cheerio'),
-      rp = require('request-promise'),
-      router = express.Router(),
-      db = require('../models');
+const express = require('express');
+  cheerio = require('cheerio');
+  router = express.Router();
+  db = require('../models');
+  let axios = require('axios');
+  // app = express();
+// A GET route for scraping the echoJS website
+router.get("/newArticles", function (req, res) {
+  // First, we grab the body of the html with axios
+  axios.get('https://www.nytimes.com/section/us').then(function (response) {
+    // Then, we load that into cheerio and save it to $ for a shorthand selector
+    var $ = cheerio.load(response.data);
 
-//route to scrape new articles
-router.get("/newArticles", function(req, res) {
-  //configuring options object for request-promist
-  const options = {
-    uri: 'https://www.nytimes.com/section/us',
-    transform: function (body) {
-        return cheerio.load(body);
-    }
-  };
-  //calling the database to return all saved articles
-  db.Article
-    .find({})
-    .then((savedArticles) => {
-      //creating an array of saved article headlines
-      let savedHeadlines = savedArticles.map(article => article.headline);
+    // Now, we grab every h2 within an article tag, and do the following:
+    $("article h2").each(function (i, element) {
+      // Save an empty result object
+      var result = {};
 
-        //calling request promist with options object
-        rp(options)
-        .then(function ($) {
-          let newArticleArr = [];
-          //iterating over returned articles, and creating a newArticle object from the data
-          $('#latest-panel article.story.theme-summary').each((i, element) => {
-            let newArticle = new db.Article({
-              storyUrl: $(element).find('.story-body>.story-link').attr('href'),
-              headline: $(element).find('h2.headline').text().trim(),
-              summary : $(element).find('p.summary').text().trim(),
-              imgUrl  : $(element).find('img').attr('src'),
-              byLine  : $(element).find('p.byline').text().trim()
-            });
-            //checking to make sure newArticle contains a storyUrl
-            if (newArticle.storyUrl) {
-              //checking if new article matches any saved article, if not add it to array
-              //of new articles
-              if (!savedHeadlines.includes(newArticle.headline)) {
-                newArticleArr.push(newArticle);
-              }
-            }
-          });//end of each function
+      // Add the text and href of every link, and save them as properties of the result object
+      result.headline = $(this)
+        .children("a")
+        .text();
+      result.summary = $(this)
+        .children("a")
+        .attr("href");
+      result.storyURL = $(this)
+        .children("a")
+        .attr("href");
 
-          //adding all new articles to database
-          db.Article
-            .create(newArticleArr)
-            .then(result => res.json({count: newArticleArr.length}))//returning count of new articles to front end
-            .catch(err => {});
+      // Create a new Article using the `result` object built from scraping
+      db.Article.create(result)
+        .then(function (dbArticle) {
+          // View the added result in the console
+          console.log(dbArticle);
         })
-        .catch(err => console.log(err)); //end of rp method
+        .catch(function (err) {
+          // If an error occurred, log it
+          console.log(err);
+        });
+    });
+
+    // Send a message to the client
+    res.send("Scrape Complete");
+  });
+});
+
+router.get("/articles", function (req, res) {
+  // Grab every document in the Articles collection
+  db.Article.find({})
+    .then(function (dbArticle) {
+      // If we were able to successfully find Articles, send them back to the client
+      res.json(dbArticle);
     })
-    .catch(err => console.log(err)); //end of db.Article.find()
-});// end of get request to /scrape
+    .catch(function (err) {
+      // If an error occurred, send it to the client
+      res.json(err);
+    });
+});
+
+//adding all new articles to database
+
 
 module.exports = router;

@@ -1,58 +1,55 @@
-var express = require("express");
-var logger = require("morgan");
-var mongoose = require("mongoose");
+//dependencies
+const express = require('express'),
+      mongoose = require('mongoose'),
+      exphbs = require('express-handlebars'),
+      bodyParser = require('body-parser'),
+      logger = require('morgan'),
+      path = require('path');
+      
+//initializing the app
+const app = express();
 
-// Our scraping tools
-// Axios is a promised-based http library, similar to jQuery's Ajax method
-// It works on the client and on the server
-var axios = require("axios");
-var cheerio = require("cheerio");
+//setting up the database
 
-// Require all models
-var db = require("./models");
+const config = require('./config/database');
 
-var PORT = 3000;
+mongoose
+  .connect(config.database, { useNewUrlParser: true })
+  .then( result => {
+    console.log(`Connected to database '${result.connections[0].name}' on ${result.connections[0].host}:${result.connections[0].port}`);
+  })
+  .catch(err => console.log('There was an error with your connection:', err));
 
-// Initialize Express
-var app = express();
+//setting up Morgan middleware
+app.use(logger('dev'));
 
-// Configure middleware
+//setting up body parser middleware
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({extended: false}));
 
-// Use morgan logger for logging requests
-app.use(logger("dev"));
-// Parse request body as JSON
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-// Make public a static folder
-app.use(express.static("public"));
-app.use('/articles', express.static(path.join(__dirname, 'public')));
-app.use('/notes', express.static(path.join(__dirname, 'public')));
-
-//handlebars middleware
-app.engine('handlebars', exphbs({ defaultLayout: 'main' }));
+//setting up handlebars middleware
+app.engine('handlebars', exphbs({defaultLayout: 'main'}));
 app.set('view engine', 'handlebars');
 
-// Connect to the Mongo DB
-const config = require('./config/database');
-mongoose.Promise = Promise;
-mongoose.connect(config.database, { useNewUrlParser: true })
-.then( result => {
-  console.log(`Connected to database '${result.connections[0].name}' on ${result.connections[0].host}:${result.connections[0].port}`);
-})
-.catch(err => console.log('There was an error with your connection:', err));
+//setting up the static directory
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/articles',express.static(path.join(__dirname, 'public')));
+app.use('/notes',express.static(path.join(__dirname, 'public')));
+
 
 //setting up routes
 const index = require('./routes/index'),
-  articles = require('./routes/articles'),
-  notes = require('./routes/notes'),
-  scrape = require('./routes/scrape');
+      articles = require('./routes/articles'),
+      notes = require('./routes/notes'),
+      scrape = require('./routes/scrape');
 
 app.use('/', index);
 app.use('/articles', articles);
 app.use('/notes', notes);
 app.use('/scrape', scrape);
 
-// Start the server
+//starting server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, function () {
-  console.log("App running on port " + PORT + "!");
+  console.log(`Listening on http://localhost:${PORT}`);
 });
